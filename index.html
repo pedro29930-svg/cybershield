@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>CyberShield | Scanner de Segurança</title>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Segoe UI,Arial;
+}
+
+body{
+background:#0f172a;
+color:white;
+display:flex;
+align-items:center;
+justify-content:center;
+height:100vh;
+}
+
+.container{
+width:650px;
+background:#111827;
+padding:40px;
+border-radius:14px;
+box-shadow:0 20px 60px rgba(0,0,0,0.5);
+}
+
+.header{
+margin-bottom:25px;
+}
+
+.header h1{
+font-size:26px;
+}
+
+.header p{
+color:#9ca3af;
+font-size:14px;
+margin-top:5px;
+}
+
+textarea{
+width:100%;
+height:120px;
+border-radius:10px;
+border:none;
+padding:15px;
+font-size:14px;
+margin-top:10px;
+resize:none;
+}
+
+button{
+width:100%;
+margin-top:15px;
+padding:14px;
+border:none;
+border-radius:10px;
+background:#2563eb;
+color:white;
+font-size:16px;
+cursor:pointer;
+transition:0.2s;
+}
+
+button:hover{
+background:#1d4ed8;
+}
+
+.loader{
+text-align:center;
+margin-top:20px;
+display:none;
+}
+
+.result{
+margin-top:25px;
+padding:25px;
+border-radius:12px;
+display:none;
+}
+
+.safe{ background:#064e3b; }
+.warning{ background:#78350f; }
+.danger{ background:#7f1d1d; }
+
+.score{
+font-size:32px;
+font-weight:bold;
+margin-bottom:10px;
+}
+
+.type{
+font-size:14px;
+opacity:0.8;
+margin-bottom:10px;
+}
+
+.details{
+font-size:14px;
+line-height:1.6;
+}
+
+.history{
+margin-top:20px;
+font-size:13px;
+color:#9ca3af;
+}
+
+.reset{
+margin-top:10px;
+background:#374151;
+}
+
+.reset:hover{
+background:#4b5563;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="header">
+<h1>🛡 CyberShield Scanner</h1>
+<p>Verifique links, domínios, mensagens ou possíveis golpes de PIX</p>
+</div>
+
+<textarea id="dataInput" placeholder="Cole aqui link, domínio, chave PIX ou mensagem suspeita"></textarea>
+
+<button onclick="scan()">Analisar Segurança</button>
+
+<div class="loader" id="loader">
+🔎 Escaneando dados...
+</div>
+
+<div id="resultBox" class="result">
+
+<div class="score" id="score"></div>
+
+<div class="type" id="type"></div>
+
+<div class="details" id="details"></div>
+
+<div class="history" id="history"></div>
+
+<button class="reset" onclick="resetScanner()">Nova verificação</button>
+
+</div>
+
+</div>
+
+<script>
+
+function detectType(text){
+
+if(text.includes("http") || text.includes("www")) return "Link / URL"
+
+if(text.match(/\.[a-z]{2,3}/)) return "Domínio"
+
+if(text.match(/@|\.com|\.br/) && text.length < 40) return "Possível chave PIX"
+
+return "Texto / mensagem"
+
+}
+
+function scan(){
+
+let text = document.getElementById("dataInput").value.toLowerCase().trim()
+
+if(text===""){
+alert("Insira algum dado para análise")
+return
+}
+
+document.getElementById("loader").style.display="block"
+document.getElementById("resultBox").style.display="none"
+
+setTimeout(()=>{
+
+let score = 0
+let motivos=[]
+
+const scamWords=[
+"urgente",
+"pix imediato",
+"ganhe dinheiro",
+"promoção imperdível",
+"liberação de valor",
+"bloqueio de conta",
+"clique aqui",
+"verifique agora",
+"senha"
+]
+
+scamWords.forEach(word=>{
+if(text.includes(word)){
+score+=15
+motivos.push("Uso de linguagem típica de golpe")
+}
+})
+
+if(text.includes("http://")){
+score+=20
+motivos.push("Link não seguro (HTTP)")
+}
+
+if(text.match(/\.ru|\.xyz|\.tk|\.top/)){
+score+=25
+motivos.push("Domínio frequentemente usado em phishing")
+}
+
+if(text.length>150){
+score+=10
+motivos.push("Mensagem longa suspeita")
+}
+
+if(score>100) score=100
+
+showResult(score,motivos,text)
+
+document.getElementById("loader").style.display="none"
+
+},1200)
+
+}
+
+function showResult(score,motivos,text){
+
+let result=document.getElementById("resultBox")
+let scoreBox=document.getElementById("score")
+let typeBox=document.getElementById("type")
+let details=document.getElementById("details")
+
+result.style.display="block"
+
+scoreBox.innerHTML="Risco: "+score+"%"
+
+typeBox.innerHTML="Tipo detectado: "+detectType(text)
+
+if(score<30){
+
+result.className="result safe"
+details.innerHTML="Nenhum padrão forte de golpe detectado."
+
+}
+
+else if(score<60){
+
+result.className="result warning"
+details.innerHTML="Possível conteúdo suspeito.<br><br>Motivos:<br>• "+motivos.join("<br>• ")
+
+}
+
+else{
+
+result.className="result danger"
+details.innerHTML="⚠ Alto risco de golpe ou phishing.<br><br>Motivos:<br>• "+motivos.join("<br>• ")
+
+}
+
+document.getElementById("history").innerHTML="Última análise: "+new Date().toLocaleString()
+
+}
+
+function resetScanner(){
+
+document.getElementById("dataInput").value=""
+document.getElementById("resultBox").style.display="none"
+
+}
+
+</script>
+
+</body>
+
+</html>
