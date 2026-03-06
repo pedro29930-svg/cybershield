@@ -7,7 +7,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>Detector de Golpes Online | Verificador de Links, PIX e Phishing</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<script>
+<div id="searchArea">
+
+<input type="text" id="consulta" placeholder="Cole aqui mensagem, link ou chave PIX suspeita">
+
+<button onclick="verificar()">Verificar</button>
+
+</div>
+
+
+<div id="resultadoArea" style="display:none;">
+<h3 id="resultadoTexto"></h3>
+
+<button onclick="novaConsulta()">Nova consulta</button>
+
+</div>
+const SUPABASE_URL = "https://qpqxjbbpztjsisibyphp.supabase.co"
+const SUPABASE_KEY = "sb_publishable_lO_udm9A0iar4aJU-gE9qA_sYhrpUGA"
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+)
+
+</script>
 <meta name="description" content="Ferramenta gratuita para verificar links suspeitos, golpes de PIX e phishing. Analise URLs e mensagens em segundos.">
 
 <meta name="keywords" content="verificar golpe pix, verificar link seguro, detector phishing, scanner de segurança online">
@@ -28,7 +54,49 @@ padding:0;
 box-sizing:border-box;
 font-family:Arial, Helvetica, sans-serif;
 }
+<script>
 
+async function verificar(){
+
+const texto = document.getElementById("consulta").value
+
+if(!texto){
+alert("Digite algo para verificar")
+return
+}
+
+const permitido = await canScan()
+
+if(!permitido) return
+
+// aqui roda sua análise
+const resultado = analisarTexto(texto)
+
+// salva no banco
+await saveScan(texto,resultado)
+
+// mostra resultado
+document.getElementById("resultadoTexto").innerText = resultado
+
+// ESCONDE busca
+document.getElementById("searchArea").style.display = "none"
+
+// MOSTRA resultado
+document.getElementById("resultadoArea").style.display = "block"
+
+}
+
+function novaConsulta(){
+
+document.getElementById("consulta").value = ""
+
+document.getElementById("resultadoArea").style.display = "none"
+
+document.getElementById("searchArea").style.display = "block"
+
+}
+
+</script>
 body{
 background:#0f172a;
 color:white;
@@ -365,5 +433,6 @@ detailsBox.innerHTML="⚠ Alto risco de golpe ou phishing.<br><br>Motivos:<br>�
 </script>
 
 </body>
+
 
 </html>
