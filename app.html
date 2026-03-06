@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CyberShield — Detector de Golpes Online</title>
+<meta name="description" content="Verifique links suspeitos, chaves PIX fraudulentas, perfis falsos e mensagens de phishing. Análise em tempo real.">
+<meta name="keywords" content="verificar golpe pix, verificar link seguro, detector phishing, scanner segurança online">
+<meta name="robots" content="index, follow">
+<meta property="og:title" content="CyberShield — Detector de Golpes Online">
+<meta property="og:description" content="Verifique links, PIX e mensagens suspeitas com IA de segurança.">
+<meta property="og:type" content="website">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- Stripe.js (carregado async, inicializado quando necessário) -->
+<script src="https://js.stripe.com/v3/" async></script>
+
+<style>
+/* ── Reset & Variables ─────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #050810;
+  --panel:   #0b0f1a;
+  --border:  #1a2235;
+  --accent:  #00e5ff;
+  --accent2: #ff3b6f;
+  --muted:   #3d4f6e;
+  --text:    #c8d8f0;
+  --dim:     #5a7094;
+  --safe:    #3dffa0;
+  --warn:    #ffc93c;
+  --danger:  #ff4560;
+  --r:       12px;
+}
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh; overflow-x: hidden;
+}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+/* ── Background ──────────────────────────── */
+#bg-grid {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+#scanline {
+  position: fixed; left: 0; right: 0; height: 2px; z-index: 1;
+  background: linear-gradient(transparent, rgba(0,229,255,0.08), transparent);
+  pointer-events: none;
+  animation: scanline 9s linear infinite;
+}
+@keyframes scanline { 0%{top:-2px} 100%{top:100vh} }
+
+/* ── Layout ──────────────────────────────── */
+#app { position: relative; z-index: 2; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Topbar ──────────────────────────────── */
+#topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 36px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(5,8,16,0.92);
+  backdrop-filter: blur(14px);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 17px; font-weight: 700;
+  color: var(--accent); letter-spacing: 2px;
+  text-decoration: none; cursor: pointer;
+}
+.logo-hex {
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--accent), #0066ff);
+  clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
+.nav-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.badge-plan {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  padding: 4px 11px; border-radius: 20px;
+  background: rgba(0,229,255,0.1); border: 1px solid rgba(0,229,255,0.22);
+  color: var(--accent);
+}
+.badge-plan.plus { background: rgba(255,59,111,0.1); border-color: rgba(255,59,111,0.25); color: var(--accent2); }
+.badge-scans { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--dim); }
+
+/* ── Buttons ─────────────────────────────── */
+.btn {
+  padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
+  font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.5px; transition: all 0.18s;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--dim); }
+.btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn-primary { background: var(--accent); color: #000; }
+.btn-primary:hover:not(:disabled) { background: #33ecff; box-shadow: 0 0 22px rgba(0,229,255,0.3); transform: translateY(-1px); }
+.btn-danger { background: var(--accent2); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #ff5c86; box-shadow: 0 0 22px rgba(255,59,111,0.3); transform: translateY(-1px); }
+.btn-lg { padding: 13px 32px; font-size: 13px; border-radius: 10px; }
+.btn-full { width: 100%; justify-content: center; }
+
+/* ── Animations ──────────────────────────── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+.fade-up { animation: fadeUp .38s ease both; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* ── Screens ─────────────────────────────── */
+.screen { display: none; flex: 1; }
+.screen.active { display: flex; }
+
+/* ── Auth ────────────────────────────────── */
+#screen-auth { align-items: center; justify-content: center; padding: 40px 20px; }
+.auth-card {
+  width: 100%; max-width: 450px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 18px; padding: 46px 38px;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,229,255,0.04);
+}
+.auth-title { font-size: 25px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+.auth-sub   { font-size: 13px; color: var(--dim); margin-bottom: 28px; line-height: 1.55; }
+.field { margin-bottom: 16px; }
+.field label {
+  display: block; font-family: 'Space Mono', monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+  color: var(--dim); text-transform: uppercase; margin-bottom: 7px;
+}
+.field input {
+  width: 100%; background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 11px 15px; color: var(--text);
+  font-family: 'Share Tech Mono', monospace; font-size: 14px;
+  outline: none; transition: border-color .18s, box-shadow .18s;
+}
+.field input:focus { border-color: rgba(0,229,255,0.45); box-shadow: 0 0 0 3px rgba(0,229,255,0.09); }
+.field input::placeholder { color: var(--muted); }
+.auth-switch { margin-top: 20px; text-align: center; font-size: 13px; color: var(--dim); }
+.auth-switch button {
+  background: none; border: none; cursor: pointer;
+  color: var(--accent); font-family: inherit; font-size: 13px;
+  text-decoration: underline; padding: 0;
+}
+.msg-error {
+  background: rgba(255,59,111,0.09); border: 1px solid rgba(255,59,111,0.22);
+  border-radius: 8px; padding: 11px 14px;
+  font-size: 12px; color: var(--accent2); margin-bottom: 16px; display: none;
+}
+.msg-error.show { display: block; }
+
+/* ── App ─────────────────────────────────── */
+#screen-app { flex-direction: column; align-items: center; padding: 44px 24px 60px; }
+.main-inner { width: 100%; max-width: 820px; }
+.section-title { font-size: 30px; font-weight: 800; color: #fff; letter-spacing: -.4px; margin-bottom: 6px; }
+.section-title span { color: var(--accent); }
+.section-sub { font-size: 13px; color: var(--dim); line-height: 1.6; margin-bottom: 28px; }
+
+/* ── Stats ───────────────────────────────── */
+.stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 28px; }
+.stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); padding: 18px 20px; }
+.stat-label { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 1.2px; color: var(--dim); text-transform: uppercase; margin-bottom: 8px; }
+.stat-val { font-family: 'Space Mono', monospace; font-size: 24px; font-weight: 700; color: #fff; }
+
+/* ── Search ──────────────────────────────── */
+.search-box {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 16px; padding: 26px; margin-bottom: 22px;
+  transition: border-color .25s, box-shadow .25s;
+}
+.search-box:focus-within { border-color: rgba(0,229,255,0.28); box-shadow: 0 0 28px rgba(0,229,255,0.04); }
+.search-indicator {
+  font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; color: var(--accent); text-transform: uppercase;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.search-indicator::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 7px var(--accent);
+  flex-shrink: 0; animation: blink 1.3s ease-in-out infinite;
+}
+#search-input {
+  width: 100%; min-height: 96px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; color: var(--text);
+  font-family: 'Share Tech Mono', monospace; font-size: 13px; line-height: 1.65;
+  resize: vertical; outline: none; transition: border-color .18s;
+}
+#search-input:focus { border-color: rgba(0,229,255,0.28); }
+#search-input::placeholder { color: var(--muted); }
+.search-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 14px; flex-wrap: wrap;
+}
+.type-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700;
+  letter-spacing: .5px; padding: 4px 10px; border-radius: 20px;
+  border: 1px solid var(--border); color: var(--dim); transition: all .15s;
+}
+.chip.detected { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.08); }
+
+/* ── Loader ──────────────────────────────── */
+#loader { text-align: center; padding: 48px 20px; display: none; }
+#loader.show { display: block; }
+.spinner {
+  width: 44px; height: 44px; margin: 0 auto 18px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .75s linear infinite;
+}
+.loader-text { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: var(--dim); }
+
+/* ── Result ──────────────────────────────── */
+#result-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden; display: none;
+}
+#result-card.show { display: block; }
+.result-header {
+  padding: 24px 26px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 18px;
+}
+.risk-circle-wrap { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+.risk-circle-wrap svg { display: block; transform: rotate(-90deg); }
+.risk-num {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: 'Space Mono', monospace; font-size: 17px; font-weight: 700; line-height: 1;
+}
+.risk-num-sub { font-size: 8px; letter-spacing: 1px; color: var(--dim); margin-top: 3px; font-weight: 400; }
+.result-summary { flex: 1; min-width: 0; }
+.result-status { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+.result-type { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-bottom: 6px; }
+.result-query { font-family: 'Share Tech Mono', monospace; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-body { padding: 20px 26px; }
+.reasons-list { list-style: none; }
+.reasons-list li {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 13px; color: var(--text); line-height: 1.5;
+}
+.reasons-list li:last-child { border-bottom: none; }
+.reason-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.no-issues { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: var(--safe); padding: 8px 0; }
+.result-footer {
+  padding: 14px 26px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(0,0,0,0.18); flex-wrap: wrap;
+}
+.remaining-badge { margin-left: auto; font-size: 11px; color: var(--dim); font-family: 'Share Tech Mono', monospace; }
+
+/* ── Paywall ─────────────────────────────── */
+.paywall-notice {
+  margin-top: 14px; padding: 13px 16px;
+  background: rgba(255,59,111,0.07); border: 1px solid rgba(255,59,111,0.18);
+  border-radius: 10px; font-size: 12px; color: var(--accent2); display: none;
+}
+.paywall-notice.show { display: block; }
+.paywall-notice a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+#paywall-banner {
+  background: linear-gradient(135deg,rgba(255,59,111,0.07),rgba(255,59,111,0.02));
+  border: 1px solid rgba(255,59,111,0.18);
+  border-radius: 14px; padding: 32px; text-align: center; display: none;
+}
+#paywall-banner.show { display: block; }
+.paywall-title { font-size: 21px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+.paywall-sub { font-size: 13px; color: var(--dim); line-height: 1.6; margin-bottom: 22px; }
+
+/* ── History ─────────────────────────────── */
+#history-section { margin-top: 36px; display: none; }
+#history-section.show { display: block; }
+.history-head {
+  font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; color: var(--dim); text-transform: uppercase;
+  margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+}
+.history-head::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.history-item {
+  display: flex; align-items: center; padding: 11px 14px;
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 7px; cursor: pointer;
+  transition: border-color .15s; gap: 10px;
+}
+.history-item:hover { border-color: var(--muted); }
+.h-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.h-query { font-family: 'Share Tech Mono', monospace; font-size: 12px; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h-meta { font-size: 10px; color: var(--dim); white-space: nowrap; }
+
+/* ── Modals ──────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.78); backdrop-filter: blur(7px);
+  display: none; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 20px; width: 100%; max-width: 800px;
+  padding: 46px 38px; position: relative;
+  box-shadow: 0 60px 120px rgba(0,0,0,0.8);
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-close {
+  position: absolute; top: 18px; right: 18px;
+  background: none; border: none; cursor: pointer;
+  color: var(--dim); font-size: 20px; line-height: 1;
+  padding: 4px 8px; border-radius: 6px; transition: color .15s, background .15s;
+}
+.modal-close:hover { color: #fff; background: rgba(255,255,255,0.06); }
+.modal-title { font-size: 26px; font-weight: 800; color: #fff; text-align: center; margin-bottom: 6px; }
+.modal-sub { text-align: center; font-size: 13px; color: var(--dim); margin-bottom: 34px; }
+.modal-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 20px; }
+
+/* ── Plans ───────────────────────────────── */
+.plans-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; }
+.plan-card {
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+  border-radius: 14px; padding: 26px 22px;
+  transition: transform .2s, box-shadow .2s;
+  display: flex; flex-direction: column;
+}
+.plan-card:hover { transform: translateY(-4px); }
+.plan-card.featured { border-color: var(--accent); background: rgba(0,229,255,0.03); box-shadow: 0 0 36px rgba(0,229,255,0.07); }
+.plan-card.plus-card { border-color: var(--accent2); background: rgba(255,59,111,0.03); box-shadow: 0 0 36px rgba(255,59,111,0.07); }
+.plan-badge {
+  display: inline-block; font-family: 'Space Mono', monospace;
+  font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 20px; margin-bottom: 14px; align-self: flex-start;
+}
+.plan-badge.free { background: rgba(255,255,255,0.06); color: var(--dim); }
+.plan-badge.base { background: rgba(0,229,255,0.12); color: var(--accent); }
+.plan-badge.plus { background: rgba(255,59,111,0.12); color: var(--accent2); }
+.plan-name { font-size: 19px; font-weight: 800; color: #fff; }
+.plan-price { font-family: 'Space Mono', monospace; font-size: 27px; font-weight: 700; color: #fff; margin: 12px 0 4px; }
+.plan-price small { font-size: 13px; font-weight: 400; color: var(--dim); }
+.plan-features { list-style: none; margin: 18px 0 22px; flex: 1; }
+.plan-features li {
+  font-size: 12px; color: var(--dim); padding: 7px 0;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.plan-features li:last-child { border-bottom: none; }
+.plan-features li.ok { color: var(--text); }
+.feat-icon { font-size: 13px; flex-shrink: 0; }
+
+/* ── Stripe embedded checkout ────────────── */
+.checkout-back {
+  background: none; border: none; cursor: pointer;
+  color: var(--dim); font-family: 'Space Mono', monospace;
+  font-size: 11px; display: flex; align-items: center; gap: 6px;
+  margin-bottom: 22px; padding: 0; transition: color .15s;
+}
+.checkout-back:hover { color: var(--accent); }
+.checkout-plan-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 20px; margin-bottom: 22px;
+}
+.checkout-plan-name { font-size: 16px; font-weight: 700; color: #fff; }
+.checkout-plan-price { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; }
+.stripe-mount { min-height: 340px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.stripe-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; gap: 14px; color: var(--dim); font-family: 'Share Tech Mono', monospace; font-size: 13px; }
+.stripe-error { padding: 16px; color: var(--accent2); font-size: 13px; text-align: center; background: rgba(255,59,111,0.06); border-radius: 10px; margin-top: 12px; }
+
+/* ── Success modal ───────────────────────── */
+.success-icon { font-size: 54px; margin-bottom: 18px; display: block; }
+.success-title { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+.success-sub { font-size: 13px; color: var(--dim); line-height: 1.6; margin-bottom: 24px; }
+
+/* ── Responsive ──────────────────────────── */
+@media (max-width:700px) {
+  #topbar { padding: 14px 18px; }
+  .auth-card { padding: 34px 24px; }
+  #screen-app { padding: 28px 16px 48px; }
+  .stats-row { grid-template-columns: 1fr 1fr; }
+  .plans-grid { grid-template-columns: 1fr; }
+  .modal { padding: 34px 22px; }
+  .result-header { flex-direction: column; align-items: flex-start; }
+  .search-footer { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width:420px) {
+  .stats-row { grid-template-columns: 1fr; }
+  .logo span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div id="bg-grid"></div>
+<div id="scanline"></div>
+
+<div id="app">
+
+  <!-- ── Topbar ── -->
+  <header id="topbar">
+    <div class="logo" onclick="handleLogoClick()">
+      <div class="logo-hex">🛡</div>
+      <span>CYBERSHIELD</span>
+    </div>
+    <div class="nav-right" id="nav-right"></div>
+  </header>
+
+  <!-- ══ AUTH SCREEN ══ -->
+  <div id="screen-auth" class="screen">
+    <div class="auth-card fade-up">
+
+      <!-- Login -->
+      <div id="panel-login">
+        <div class="auth-title">Bem-vindo 👋</div>
+        <div class="auth-sub">Faça login para acessar seu painel de segurança.</div>
+        <div class="msg-error" id="login-error"></div>
+        <div class="field">
+          <label>E-mail</label>
+          <input type="email" id="login-email" placeholder="seu@email.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label>Senha</label>
+          <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary btn-lg btn-full" id="btn-login" style="margin-top:8px">
+          Entrar
+        </button>
+        <div class="auth-switch">
+          Não tem conta? <button id="btn-goto-register">Criar conta grátis</button>
+        </div>
+      </div>
+
+      <!-- Register -->
+      <div id="panel-register" style="display:none">
+        <div class="auth-title">Bem-vindo 👋</div>
+        <div class="auth-sub">Comece com 5 consultas gratuitas. Sem cartão de crédito.</div>
+        <div class="msg-error" id="register-error"></div>
+        <div class="field">
+          <label>Nome</label>
+          <input type="text" id="reg-name" placeholder="Seu nome" autocomplete="name">
+        </div>
+        <div class="field">
+          <label>E-mail</label>
+          <input type="email" id="reg-email" placeholder="seu@email.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label>Senha</label>
+          <input type="password" id="reg-pass" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary btn-lg btn-full" id="btn-register" style="margin-top:8px">
+          Criar conta grátis
+        </button>
+        <div class="auth-switch">
+          Já tem conta? <button id="btn-goto-login">Fazer login</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ APP SCREEN ══ -->
+  <div id="screen-app" class="screen">
+    <div class="main-inner fade-up">
+
+      <div class="section-title">Painel de <span>Segurança</span></div>
+      <div class="section-sub">Analise links, chaves PIX, perfis de redes sociais e mensagens suspeitas.</div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Consultas realizadas</div>
+          <div class="stat-val" id="stat-total">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Ameaças detectadas</div>
+          <div class="stat-val" id="stat-threats">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Plano atual</div>
+          <div class="stat-val" id="stat-plan" style="font-size:16px;margin-top:4px;color:var(--accent)">Gratuito</div>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="search-box" id="search-box">
+        <div class="search-indicator">Análise de Segurança</div>
+        <textarea id="search-input"
+          placeholder="Cole aqui: link, domínio, chave PIX, perfil de rede social ou mensagem suspeita…"></textarea>
+        <div class="search-footer">
+          <div class="type-chips" id="type-chips">
+            <span class="chip" data-type="URL">URL</span>
+            <span class="chip" data-type="Chave PIX / E-mail">Chave PIX</span>
+            <span class="chip" data-type="CPF / Chave PIX">CPF/PIX</span>
+            <span class="chip" data-type="Perfil em rede social">Rede Social</span>
+            <span class="chip" data-type="Mensagem de texto">Mensagem</span>
+          </div>
+          <button class="btn btn-primary btn-lg" id="btn-scan">⚡ Analisar</button>
+        </div>
+        <div class="paywall-notice" id="paywall-notice">
+          ⚠ Limite atingido. <a id="paywall-notice-link">Assine um plano para continuar →</a>
+        </div>
+      </div>
+
+      <!-- Loader -->
+      <div id="loader" class="search-box">
+        <div class="spinner"></div>
+        <div class="loader-text" id="loader-text">Iniciando análise…</div>
+      </div>
+
+      <!-- Result -->
+      <div id="result-card">
+        <div class="result-header">
+          <div class="risk-circle-wrap">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+              <circle id="risk-arc" cx="40" cy="40" r="32" fill="none"
+                stroke="#3dffa0" stroke-width="5" stroke-linecap="round"
+                stroke-dasharray="0 201.06"/>
+            </svg>
+            <div class="risk-num" id="risk-num">0%<span class="risk-num-sub">RISCO</span></div>
+          </div>
+          <div class="result-summary">
+            <div class="result-status" id="result-status">—</div>
+            <div class="result-type"   id="result-type">—</div>
+            <div class="result-query"  id="result-query">—</div>
+          </div>
+        </div>
+        <div class="result-body">
+          <ul class="reasons-list" id="reasons-list"></ul>
+        </div>
+        <div class="result-footer">
+          <button class="btn btn-ghost" id="btn-new-scan">↩ Nova consulta</button>
+          <span class="remaining-badge" id="remaining-badge"></span>
+        </div>
+      </div>
+
+      <!-- Paywall banner -->
+      <div id="paywall-banner">
+        <div class="paywall-title">🔒 Limite gratuito atingido</div>
+        <div class="paywall-sub">Você usou todas as suas consultas gratuitas.<br>Assine um plano para continuar protegido.</div>
+        <button class="btn btn-primary btn-lg" id="btn-paywall-upgrade">Ver planos →</button>
+      </div>
+
+      <!-- History -->
+      <div id="history-section">
+        <div class="history-head">Histórico de consultas</div>
+        <div id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ══ MODAL: PRICING ══ -->
+<div class="modal-overlay" id="modal-pricing">
+  <div class="modal fade-up" id="modal-pricing-inner" style="max-width:800px">
+    <button class="modal-close" id="close-pricing">✕</button>
+
+    <!-- Step 1: plan selection -->
+    <div id="pricing-plans">
+      <div class="modal-title">Escolha seu plano</div>
+      <div class="modal-sub">Proteja-se sem limites. Cancele quando quiser.</div>
+      <div class="plans-grid">
+        <div class="plan-card">
+          <span class="plan-badge free">FREE</span>
+          <div class="plan-name">Gratuito</div>
+          <div class="plan-price">R$ 0<small></small></div>
+          <ul class="plan-features">
+            <li class="ok"><span class="feat-icon">✅</span>5 consultas</li>
+            <li class="ok"><span class="feat-icon">✅</span>Análise de URLs e mensagens</li>
+            <li><span class="feat-icon">❌</span>Histórico de consultas</li>
+            <li><span class="feat-icon">❌</span>Consulta VirusTotal</li>
+            <li><span class="feat-icon">❌</span>Google Safe Browsing</li>
+            <li><span class="feat-icon">❌</span>Relatório detalhado</li>
+          </ul>
+          <button class="btn btn-ghost btn-full" disabled>Plano atual</button>
+        </div>
+        <div class="plan-card featured">
+          <span class="plan-badge base">BASE</span>
+          <div class="plan-name">Base</div>
+          <div class="plan-price">R$ 39,90<small>/mês</small></div>
+          <ul class="plan-features">
+            <li class="ok"><span class="feat-icon">✅</span>100 consultas/mês</li>
+            <li class="ok"><span class="feat-icon">✅</span>Histórico completo</li>
+            <li class="ok"><span class="feat-icon">✅</span>Consulta VirusTotal</li>
+            <li class="ok"><span class="feat-icon">✅</span>Google Safe Browsing</li>
+            <li><span class="feat-icon">❌</span>Relatório PDF</li>
+            <li><span class="feat-icon">❌</span>API de integração</li>
+          </ul>
+          <button class="btn btn-primary btn-full" id="btn-subscribe-base">Assinar Base</button>
+        </div>
+        <div class="plan-card plus-card">
+          <span class="plan-badge plus">PLUS</span>
+          <div class="plan-name">Plus</div>
+          <div class="plan-price">R$ 59,90<small>/mês</small></div>
+          <ul class="plan-features">
+            <li class="ok"><span class="feat-icon">✅</span>Consultas ilimitadas</li>
+            <li class="ok"><span class="feat-icon">✅</span>Histórico completo</li>
+            <li class="ok"><span class="feat-icon">✅</span>VirusTotal + Safe Browsing</li>
+            <li class="ok"><span class="feat-icon">✅</span>Relatório PDF exportável</li>
+            <li class="ok"><span class="feat-icon">✅</span>API de integração</li>
+            <li class="ok"><span class="feat-icon">✅</span>Suporte prioritário</li>
+          </ul>
+          <button class="btn btn-danger btn-full" id="btn-subscribe-plus">Assinar Plus</button>
+        </div>
+      </div>
+      <p class="modal-note">🔒 Checkout seguro via Stripe · Dados do cartão nunca passam pelo nosso servidor</p>
+    </div>
+
+    <!-- Step 2: Stripe embedded checkout -->
+    <div id="pricing-checkout" style="display:none">
+      <button class="checkout-back" id="checkout-back">← Voltar aos planos</button>
+      <div class="checkout-plan-summary" id="checkout-summary">
+        <div>
+          <div class="checkout-plan-name" id="checkout-plan-name">—</div>
+          <div style="font-size:12px;color:var(--dim);margin-top:4px">Assinatura mensal · Cancele quando quiser</div>
+        </div>
+        <div class="checkout-plan-price" id="checkout-plan-price">—</div>
+      </div>
+      <div class="stripe-mount" id="stripe-mount">
+        <div class="stripe-loading" id="stripe-loading">
+          <div class="spinner" style="width:32px;height:32px;border-width:2px"></div>
+          Carregando formulário seguro…
+        </div>
+      </div>
+      <div class="stripe-error" id="stripe-error" style="display:none"></div>
+      <p class="modal-note">🔒 Seus dados de pagamento são processados diretamente pelo Stripe</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: SUCCESS ══ -->
+<div class="modal-overlay" id="modal-success">
+  <div class="modal fade-up" style="max-width:440px;text-align:center">
+    <button class="modal-close" id="close-success">✕</button>
+    <span class="success-icon">🎉</span>
+    <div class="success-title">Plano ativado!</div>
+    <div class="success-sub" id="success-msg">Seu plano já está ativo. Aproveite consultas sem limitações.</div>
+    <button class="btn btn-primary btn-lg" id="btn-success-ok">Ir para o painel →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ─── State ─────────────────────────────────────── */
+let _user  = null;   // objeto do usuário logado
+let _token = null;   // JWT em memória (não em localStorage)
+let _checkoutObj = null; // instância Stripe embedded checkout
+
+/* ─── Helpers DOM ───────────────────────────────── */
+const $ = id => document.getElementById(id);
+const show = id => $(id).style.display = '';
+const hide = id => $(id).style.display = 'none';
+
+/* ─── API call helper ───────────────────────────── */
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (_token) headers['Authorization'] = `Bearer ${_token}`;
+
+  const res = await fetch(path, {
+    ...opts,
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    credentials: 'include', // envia o cookie httpOnly também
+  });
+
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+/* ─── Risk helpers ──────────────────────────────── */
+function getRisk(score) {
+  if (score < 25) return { label:'SEGURO',    color:'#3dffa0', border:'rgba(61,255,160,0.2)',  bg:'rgba(61,255,160,0.06)'  };
+  if (score < 55) return { label:'SUSPEITO',  color:'#ffc93c', border:'rgba(255,201,60,0.2)', bg:'rgba(255,201,60,0.06)' };
+  return              { label:'ALTO RISCO', color:'#ff4560', border:'rgba(255,69,96,0.2)',  bg:'rgba(255,69,96,0.06)'  };
+}
+
+function detectTypeFE(t) {
+  if (/https?:\/\//i.test(t))              return 'URL';
+  if (/www\./i.test(t))                    return 'Domínio';
+  if (/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(t.trim())) return 'Chave PIX (aleatória)';
+  if (/^\d{11}$/.test(t.replace(/\D/g,''))) return 'CPF / Chave PIX';
+  if (/@/.test(t) && !t.includes('http')) return 'Chave PIX / E-mail';
+  if (/instagram|facebook|twitter|tiktok|x\.com/i.test(t)) return 'Perfil em rede social';
+  return 'Mensagem de texto';
+}
+
+/* ─── Modals ────────────────────────────────────── */
+function openModal(id)  { $(id).classList.add('show');    document.body.style.overflow='hidden'; }
+function closeModal(id) { $(id).classList.remove('show'); document.body.style.overflow='';       }
+function closeAllModals() {
+  document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show'));
+  document.body.style.overflow = '';
+}
+
+/* ─── Auth: show/hide panels ────────────────────── */
+function showPanel(which) {
+  $('panel-login').style.display    = which === 'login'    ? '' : 'none';
+  $('panel-register').style.display = which === 'register' ? '' : 'none';
+}
+
+function showError(id, msg) { const e=$(id); e.textContent=msg; e.classList.add('show'); }
+function clearError(id)     { const e=$(id); e.textContent='';  e.classList.remove('show'); }
+
+/* ─── Screen switcher ───────────────────────────── */
+function goAuth() {
+  $('screen-auth').classList.add('active');
+  $('screen-app').classList.remove('active');
+}
+function goApp() {
+  $('screen-auth').classList.remove('active');
+  $('screen-app').classList.add('active');
+}
+
+/* ─── Render topbar ─────────────────────────────── */
+function renderNav() {
+  const nav   = $('nav-right');
+  if (!_user) { nav.innerHTML = ''; return; }
+  const plan  = _user.plan || 'free';
+  const used  = _user.scansUsed || 0;
+  const lim   = plan==='free' ? 5 : plan==='base' ? 100 : null;
+  const scansText = lim !== null ? `${used}/${lim} consultas` : 'Ilimitado';
+  const badge = plan==='plus' ? 'PLUS' : plan==='base' ? 'BASE' : 'FREE';
+  nav.innerHTML = `
+    <span class="badge-scans">${scansText}</span>
+    <span class="badge-plan ${plan}">${badge}</span>
+    ${plan==='free' ? `<button class="btn btn-primary" id="nav-upgrade">Upgrade</button>` : ''}
+    <button class="btn btn-ghost" id="btn-logout">Sair</button>
+  `;
+  nav.querySelector('#btn-logout')?.addEventListener('click', logout);
+  nav.querySelector('#nav-upgrade')?.addEventListener('click', () => { showPricingStep('plans'); openModal('modal-pricing'); });
+}
+
+/* ─── Render stats ──────────────────────────────── */
+function renderStats() {
+  if (!_user) return;
+  const history = _user.history || [];
+  $('stat-total').textContent   = _user.scansUsed || 0;
+  $('stat-threats').textContent = history.filter(h => h.score >= 55).length;
+  const names = { free:'Gratuito', base:'Base', plus:'Plus' };
+  const planEl = $('stat-plan');
+  planEl.textContent = names[_user.plan] || 'Gratuito';
+  planEl.style.color = _user.plan==='plus' ? 'var(--accent2)' : 'var(--accent)';
+}
+
+/* ─── Paywall state ─────────────────────────────── */
+function isLocked() {
+  if (!_user) return true;
+  const plan = _user.plan || 'free';
+  const used = _user.scansUsed || 0;
+  if (plan==='free' && used>=5)   return true;
+  if (plan==='base' && used>=100) return true;
+  return false;
+}
+
+function checkPaywall() {
+  const locked = isLocked();
+  $('btn-scan').disabled = locked;
+  $('paywall-notice').classList.toggle('show', locked);
+  const showBanner = locked && !$('result-card').classList.contains('show');
+  $('paywall-banner').classList.toggle('show', showBanner);
+}
+
+/* ─── History ───────────────────────────────────── */
+function renderHistory() {
+  const history = _user?.history || [];
+  const section = $('history-section');
+  const list    = $('history-list');
+  if (!history.length) { section.classList.remove('show'); return; }
+  section.classList.add('show');
+  list.innerHTML = '';
+  history.forEach(h => {
+    const risk = getRisk(h.score);
+    const div  = document.createElement('div');
+    div.className = 'history-item';
+    div.innerHTML = `
+      <div class="h-dot" style="background:${risk.color}"></div>
+      <div class="h-query">${esc(h.query.slice(0,70))}${h.query.length>70?'…':''}</div>
+      <div class="h-meta">${h.inputType} · ${risk.label}</div>
+    `;
+    div.addEventListener('click', () => {
+      $('search-input').value = h.query;
+      updateChips(h.query);
+      $('search-input').scrollIntoView({ behavior:'smooth', block:'center' });
+    });
+    list.appendChild(div);
+  });
+}
+
+/* ─── Chip detection ─────────────────────────────── */
+function updateChips(text) {
+  const type = detectTypeFE(text || '');
+  document.querySelectorAll('.chip').forEach(c => {
+    c.classList.toggle('detected', c.dataset.type === type);
+  });
+}
+
+/* ─── Login ─────────────────────────────────────── */
+async function login() {
+  clearError('login-error');
+  const email    = $('login-email').value.trim().toLowerCase();
+  const password = $('login-pass').value;
+
+  if (!email || !password) { showError('login-error','Preencha e-mail e senha.'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('login-error','E-mail inválido.'); return; }
+
+  $('btn-login').disabled = true;
+  $('btn-login').textContent = 'Entrando…';
+
+  const { ok, data } = await api('/api/auth/login', { method:'POST', body:{ email, password } });
+
+  $('btn-login').disabled = false;
+  $('btn-login').textContent = 'Entrar';
+
+  if (!ok) { showError('login-error', data.error || 'Erro ao fazer login.'); return; }
+
+  _token = data.token;
+  _user  = data.user;
+  enterApp();
+}
+
+/* ─── Register ──────────────────────────────────── */
+async function register() {
+  clearError('register-error');
+  const name     = $('reg-name').value.trim();
+  const email    = $('reg-email').value.trim().toLowerCase();
+  const password = $('reg-pass').value;
+
+  if (!name)           { showError('register-error','Digite seu nome.'); return; }
+  if (!email)          { showError('register-error','Digite seu e-mail.'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('register-error','E-mail inválido.'); return; }
+  if (password.length < 6) { showError('register-error','Senha deve ter ao menos 6 caracteres.'); return; }
+
+  $('btn-register').disabled = true;
+  $('btn-register').textContent = 'Criando conta…';
+
+  const { ok, data } = await api('/api/auth/register', { method:'POST', body:{ name, email, password } });
+
+  $('btn-register').disabled = false;
+  $('btn-register').textContent = 'Criar conta grátis';
+
+  if (!ok) { showError('register-error', data.error || 'Erro ao criar conta.'); return; }
+
+  _token = data.token;
+  _user  = data.user;
+  enterApp();
+}
+
+/* ─── Logout ────────────────────────────────────── */
+async function logout() {
+  await api('/api/auth/logout', { method:'POST' });
+  _token = null;
+  _user  = null;
+  resetSearch();
+  closeAllModals();
+  $('nav-right').innerHTML = '';
+  goAuth();
+  showPanel('login');
+}
+
+/* ─── Enter app ─────────────────────────────────── */
+function enterApp() {
+  renderNav();
+  renderStats();
+  renderHistory();
+  checkPaywall();
+  goApp();
+}
+
+/* ─── Scan ──────────────────────────────────────── */
+const SCAN_STEPS = [
+  'Identificando tipo de entrada…',
+  'Verificando padrões de phishing…',
+  'Consultando bancos de ameaças…',
+  'Gerando relatório de risco…',
+];
+
+async function doScan() {
+  if (isLocked()) { showPricingStep('plans'); openModal('modal-pricing'); return; }
+
+  const raw = $('search-input').value.trim();
+  if (!raw) { $('search-input').focus(); return; }
+
+  // Show loader
+  hide('search-box');
+  $('loader').classList.add('show');
+  $('result-card').classList.remove('show');
+  $('paywall-banner').classList.remove('show');
+
+  // Animate scan steps
+  for (let i=0; i<SCAN_STEPS.length; i++) {
+    $('loader-text').textContent = SCAN_STEPS[i];
+    await sleep(450 + Math.random()*150);
+  }
+
+  // Call real API
+  const { ok, data } = await api('/api/scan', { method:'POST', body:{ dados: raw } });
+
+  $('loader').classList.remove('show');
+
+  if (!ok) {
+    if (data.upgrade) {
+      // Limite atingido no servidor
+      show('search-box');
+      checkPaywall();
+      openModal('modal-pricing');
+      return;
+    }
+    // Outro erro
+    show('search-box');
+    alert(data.error || 'Erro ao analisar. Tente novamente.');
+    return;
+  }
+
+  // Update local user state
+  if (_user) {
+    _user.scansUsed = data.scansUsed;
+    if (!_user.history) _user.history = [];
+    _user.history.unshift({
+      query:     raw,
+      score:     data.score,
+      status:    data.status,
+      inputType: data.inputType,
+      ts:        Date.now(),
+    });
+    _user.history = _user.history.slice(0, 15);
+  }
+
+  renderResult(data, raw);
+  $('result-card').classList.add('show');
+  renderNav();
+  renderStats();
+  renderHistory();
+  checkPaywall();
+}
+
+function renderResult(data, raw) {
+  const risk  = getRisk(data.score);
+  const circ  = 2 * Math.PI * 32;
+  const dash  = (data.score / 100) * circ;
+
+  const arc = $('risk-arc');
+  arc.setAttribute('stroke', risk.color);
+  arc.setAttribute('stroke-dasharray', `${dash.toFixed(2)} ${circ.toFixed(2)}`);
+
+  const numEl = $('risk-num');
+  numEl.style.color     = risk.color;
+  numEl.childNodes[0].textContent = data.score + '%';
+
+  $('result-status').textContent = data.status;
+  $('result-status').style.color = risk.color;
+  $('result-type').textContent   = 'Tipo: ' + data.inputType;
+  $('result-query').textContent  = raw.length > 90 ? raw.slice(0,90)+'…' : raw;
+
+  const card = $('result-card');
+  card.style.borderColor = risk.border;
+  card.style.background  = `linear-gradient(to bottom, ${risk.bg}, transparent)`;
+
+  const ul = $('reasons-list');
+  ul.innerHTML = '';
+
+  if (!data.reasons?.length) {
+    ul.innerHTML = '<li class="no-issues">✅ Nenhum padrão de risco identificado.</li>';
+  } else {
+    data.reasons.forEach(r => {
+      const icon = r.sev==='danger' ? '🔴' : r.sev==='warn' ? '🟡' : '🔵';
+      const li   = document.createElement('li');
+      li.innerHTML = `<span class="reason-icon">${icon}</span><span>${esc(r.msg)}</span>`;
+      ul.appendChild(li);
+    });
+  }
+
+  // Remaining badge
+  const plan  = _user?.plan || 'free';
+  const limit = plan==='free' ? 5 : plan==='base' ? 100 : null;
+  $('remaining-badge').textContent = limit !== null
+    ? `${Math.max(0, limit - (_user?.scansUsed||0))} consultas restantes`
+    : '';
+}
+
+function resetSearch() {
+  $('search-input').value = '';
+  show('search-box');
+  $('loader').classList.remove('show');
+  $('result-card').classList.remove('show');
+  updateChips('');
+  checkPaywall();
+}
+
+/* ─── Stripe Embedded Checkout ───────────────────── */
+async function startCheckout(planId) {
+  const planMeta = {
+    base: { name: 'CyberShield Base', price: 'R$ 39,90' },
+    plus: { name: 'CyberShield Plus', price: 'R$ 59,90' },
+  };
+  const meta = planMeta[planId];
+
+  showPricingStep('checkout');
+  $('checkout-plan-name').textContent  = meta.name;
+  $('checkout-plan-price').textContent = meta.price + '/mês';
+  $('stripe-error').style.display      = 'none';
+
+  // Destroy previous checkout if any
+  if (_checkoutObj) { _checkoutObj.destroy(); _checkoutObj = null; }
+
+  try {
+    // 1. Pede client_secret ao backend
+    const { ok, data } = await api('/api/create-checkout-session', {
+      method: 'POST', body: { plan: planId },
+    });
+    if (!ok) throw new Error(data.error || 'Erro ao iniciar pagamento');
+
+    const clientSecret = data.clientSecret;
+
+    // 2. Carrega Stripe.js (já incluso no <head>)
+    const stripeKey = document.querySelector('meta[name="stripe-pk"]')?.content
+      || 'pk_test_51T81Vd2X81cg2eITakP7aZ0fIypPy6Ax0zpUEZdhvg6tQ2i5Ih9cZSpHMzeEVOEDr1V6gYseg6I4aPT3WSpNk3gQ00ZGso2DEz';
+
+    // Aguarda Stripe.js estar disponível
+    let attempts = 0;
+    while (!window.Stripe && attempts++ < 20) await sleep(200);
+    if (!window.Stripe) throw new Error('Stripe.js não carregou.');
+
+    const stripe = window.Stripe(stripeKey);
+
+    // 3. Inicializa checkout embedded (mesmo que checkout.js da amostra)
+    _checkoutObj = await stripe.initEmbeddedCheckout({
+      fetchClientSecret: async () => clientSecret,
+      onComplete: async () => {
+        // Busca status da sessão (mesmo que return.js da amostra)
+        const params = new URLSearchParams(window.location.search);
+        const sid    = params.get('session_id');
+        if (sid) {
+          const { data: status } = await api(`/api/session-status?session_id=${sid}`);
+          if (status.status === 'complete') {
+            activatePlan(planId, status.customerEmail);
+            return;
+          }
+        }
+        activatePlan(planId, _user?.email);
+      },
+    });
+
+    // 4. Monta no div (equivale a checkout.mount('#checkout'))
+    $('stripe-loading').style.display = 'none';
+    _checkoutObj.mount($('stripe-mount'));
+
+  } catch (err) {
+    const errEl = $('stripe-error');
+    errEl.textContent = '⚠ ' + (err.message || 'Erro desconhecido');
+    errEl.style.display = 'block';
+    $('stripe-loading').style.display = 'none';
+  }
+}
+
+function activatePlan(planId, email) {
+  if (_user) {
+    _user.plan = planId;
+    _user.scansUsed = 0;
+  }
+  closeModal('modal-pricing');
+  if (_checkoutObj) { _checkoutObj.destroy(); _checkoutObj = null; }
+  $('success-msg').innerHTML = email
+    ? `Confirmação enviada para <strong style="color:var(--accent)">${esc(email)}</strong>.<br>Seu plano já está ativo.`
+    : 'Seu plano já está ativo. Aproveite consultas sem limitações.';
+  openModal('modal-success');
+  renderNav(); renderStats(); checkPaywall();
+}
+
+/* ─── Pricing modal steps ─────────────────────── */
+function showPricingStep(step) {
+  $('pricing-plans').style.display    = step==='plans'    ? '' : 'none';
+  $('pricing-checkout').style.display = step==='checkout' ? '' : 'none';
+  if (step==='checkout') {
+    $('modal-pricing-inner').style.maxWidth = '560px';
+    $('stripe-loading').style.display = 'block';
+    $('stripe-mount').innerHTML = '';
+    $('stripe-mount').appendChild($('stripe-loading'));
+  } else {
+    $('modal-pricing-inner').style.maxWidth = '800px';
+  }
+}
+
+/* ─── Handle Stripe return ─────────────────────── */
+function handleStripeReturn() {
+  const params  = new URLSearchParams(window.location.search);
+  const payment = params.get('payment');
+  const plan    = params.get('plan');
+  const sid     = params.get('session_id');
+
+  if (payment !== 'success' || !plan) return;
+
+  // Limpa URL
+  window.history.replaceState({}, '', window.location.pathname);
+
+  // Verifica sessão com backend
+  if (sid) {
+    api(`/api/session-status?session_id=${sid}`).then(({ data }) => {
+      if (data.status === 'complete') activatePlan(plan, data.customerEmail);
+    });
+  } else {
+    activatePlan(plan, _user?.email);
+  }
+}
+
+/* ─── Restore session on load ──────────────────── */
+async function restoreSession() {
+  // Tenta restaurar pelo cookie httpOnly (não precisa de localStorage)
+  const { ok, data } = await api('/api/auth/me');
+  if (ok && data.user) {
+    _user = data.user;
+    // _token permanece null — cookie cuida disso
+    return true;
+  }
+  return false;
+}
+
+/* ─── Util ─────────────────────────────────────── */
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function esc(str)  { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function handleLogoClick() { if (_user) { resetSearch(); } }
+
+/* ─── Boot ──────────────────────────────────────── */
+(function boot() {
+
+  // Auth inputs — keyboard
+  $('login-email').addEventListener('keydown', e => { if (e.key==='Enter') $('login-pass').focus(); });
+  $('login-pass').addEventListener('keydown',  e => { if (e.key==='Enter') login(); });
+  $('reg-name').addEventListener('keydown',    e => { if (e.key==='Enter') $('reg-email').focus(); });
+  $('reg-email').addEventListener('keydown',   e => { if (e.key==='Enter') $('reg-pass').focus(); });
+  $('reg-pass').addEventListener('keydown',    e => { if (e.key==='Enter') register(); });
+
+  // Auth buttons
+  $('btn-login').addEventListener('click', login);
+  $('btn-register').addEventListener('click', register);
+  $('btn-goto-register').addEventListener('click', () => { showPanel('register'); clearError('login-error'); clearError('register-error'); });
+  $('btn-goto-login').addEventListener('click',    () => { showPanel('login');    clearError('login-error'); clearError('register-error'); });
+
+  // Scan
+  $('btn-scan').addEventListener('click', doScan);
+  $('search-input').addEventListener('keydown', e => { if (e.key==='Enter' && (e.ctrlKey||e.metaKey)) doScan(); });
+  $('search-input').addEventListener('input',   e => updateChips(e.target.value));
+  $('btn-new-scan').addEventListener('click', resetSearch);
+
+  // Paywall
+  $('paywall-notice-link').addEventListener('click', () => { showPricingStep('plans'); openModal('modal-pricing'); });
+  $('btn-paywall-upgrade').addEventListener('click', () => { showPricingStep('plans'); openModal('modal-pricing'); });
+
+  // Pricing modal
+  $('close-pricing').addEventListener('click', () => {
+    closeModal('modal-pricing');
+    if (_checkoutObj) { _checkoutObj.destroy(); _checkoutObj = null; }
+  });
+  $('modal-pricing').addEventListener('click', e => {
+    if (e.target === $('modal-pricing')) {
+      closeModal('modal-pricing');
+      if (_checkoutObj) { _checkoutObj.destroy(); _checkoutObj = null; }
+    }
+  });
+  $('checkout-back').addEventListener('click', () => {
+    if (_checkoutObj) { _checkoutObj.destroy(); _checkoutObj = null; }
+    showPricingStep('plans');
+  });
+  $('btn-subscribe-base').addEventListener('click', () => startCheckout('base'));
+  $('btn-subscribe-plus').addEventListener('click', () => startCheckout('plus'));
+
+  // Success modal
+  $('close-success').addEventListener('click', () => closeModal('modal-success'));
+  $('btn-success-ok').addEventListener('click', () => closeModal('modal-success'));
+
+  // ESC fecha modais
+  document.addEventListener('keydown', e => { if (e.key==='Escape') { closeAllModals(); if(_checkoutObj){_checkoutObj.destroy();_checkoutObj=null;} } });
+
+  // Init
+  goAuth();
+  showPanel('login');
+
+  restoreSession().then(restored => {
+    if (restored) {
+      enterApp();
+      handleStripeReturn();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
