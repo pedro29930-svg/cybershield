@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "regions": ["gru1"],
+  "functions": {
+    "pages/api/scan.js":                    { "maxDuration": 30 },
+    "pages/api/webhook.js":                 { "maxDuration": 10 },
+    "pages/api/create-checkout-session.js": { "maxDuration": 15 }
+  }
+}
